@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Most Churches Map Animation with Image</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<style>
+html, body {
+  margin: 0; padding: 0; overflow: hidden;
+  width: 100%; height: 100%;
+  background: #070b14;
+  font-family: 'Segoe UI', Impact, sans-serif;
+}
+svg { width: 100%; height: 100%; display: block; }
+
+/* Countries */
+.country {
+  fill: #1b2333;
+  stroke: #0d1320;
+  stroke-width: 0.4;
+  transition: fill 1s ease;
+}
+.country.active {
+  fill: #d4af37 !important;
+  filter: drop-shadow(0 0 15px rgba(212,175,55,0.7));
+}
+
+/* UI Elements */
+.label-count {
+  fill: #ffffff;
+  font-size: 60px;
+  font-weight: 900;
+  text-anchor: middle;
+  text-shadow: 0 0 20px rgba(0,0,0,1);
+  letter-spacing: 2px;
+  pointer-events: none;
+}
+
+#start {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  padding: 20px 40px; font-size: 20px;
+  cursor: pointer; border: none; border-radius: 50px;
+  background: #00f6ff; color: #070b14;
+  font-weight: bold; z-index: 100;
+  box-shadow: 0 0 20px rgba(0,246,255,0.5);
+}
+</style>
+</head>
+<body>
+
+<button id="start">START ANIMATION</button>
+<audio id="pop" src="../pop.mp3" preload="auto"></audio>
+<svg id="viz"></svg>
+
+<script>
+let width = window.innerWidth;
+let height = window.innerHeight;
+
+const svg = d3.select("#viz");
+const main = svg.append("g"); 
+const topLayer = svg.append("g"); 
+
+let projection = d3.geoMercator()
+  .scale(width / 6.5)
+  .translate([width / 2, height / 1.5]);
+
+let geoPath = d3.geoPath().projection(projection);
+const pop = document.getElementById("pop");
+
+const countriesData = [
+  { name: "Spain", lon: -3.7038, lat: 40.4168, churches: 23000 },
+  { name: "Mexico", lon: -102.5, lat: 23.6, churches: 50000 },
+  { name: "Italy", lon: 12.5, lat: 41.8, churches: 60000 },
+  { name: "Brazil", lon: -51.9, lat: -14.2, churches: 100000 },
+  { name: "United States of America", lon: -95.7, lat: 37.1, churches: 375000 },
+  { name: "India", lon: 78.9629, lat: 20.5937, churches: 35000 }
+];
+
+document.getElementById("start").addEventListener("click", () => {
+  document.getElementById("start").style.display = "none";
+  startAnimation();
+});
+
+function startAnimation() {
+  d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson").then(data => {
+    
+    const worldMap = main.selectAll(".country")
+      .data(data.features)
+      .enter()
+      .append("path")
+      .attr("class", "country")
+      .attr("d", geoPath);
+
+    let index = 0;
+
+    function showNext() {
+      if (index >= countriesData.length) {
+        // --- END: DEACTIVATE USA & ZOOM OUT ---
+        worldMap.classed("active", false); 
+        
+        setTimeout(() => {
+          main.transition()
+            .duration(3000)
+            .ease(d3.easeCubicInOut)
+            .attr("transform", "translate(0,0) scale(1)");
+        }, 1200);
+        return;
+      }
+
+      const c = countriesData[index];
+      const [px, py] = projection([c.lon, c.lat]);
+
+      // 1. Highlight & Move Camera
+      worldMap.classed("active", d => {
+        const dName = d.properties.name;
+        return dName === c.name || (c.name.includes("United States") && dName.includes("USA"));
+      });
+
+      main.transition()
+        .duration(1800)
+        .ease(d3.easeCubicInOut)
+        .attr("transform", `translate(${width/2 - px*3.5}, ${height/2 - py*3.5}) scale(3.5)`)
+        .on("end", () => {
+          
+          // 2. Create UI Group
+          const labelGroup = topLayer.append("g").attr("opacity", 0);
+
+          // Pinned Image (image.png)
+          const imgSize = 120;
+          labelGroup.append("image")
+            .attr("xlink:href", "image.png")
+            .attr("width", imgSize)
+            .attr("height", imgSize)
+            .attr("x", width/2 - imgSize/2)
+            .attr("y", height/2 - imgSize - 20);
+
+          // Counter Text
+          const counterText = labelGroup.append("text")
+            .attr("class", "label-count")
+            .attr("x", width / 2).attr("y", height / 2 + 50)
+            .text("0");
+
+          // 3. Fade In & Counter Tween
+          labelGroup.transition().duration(500).attr("opacity", 1);
+          
+          pop.currentTime = 0;
+          pop.play().catch(() => {});
+
+          counterText.transition()
+            .duration(1500)
+            .ease(d3.easeQuadOut)
+            .tween("text", function() {
+              const i = d3.interpolateNumber(0, c.churches);
+              return function(t) {
+                this.textContent = Math.round(i(t)).toLocaleString();
+              };
+            })
+            .on("end", () => {
+               // 4. Wait, then Fade Out
+               labelGroup.transition()
+                .delay(1500)
+                .duration(800)
+                .attr("opacity", 0)
+                .on("end", () => {
+                  labelGroup.remove();
+                  index++;
+                  showNext();
+                });
+            });
+        });
+    }
+    showNext();
+  });
+}
+
+window.addEventListener("resize", () => {
+  width = window.innerWidth;
+  height = window.innerHeight;
+  svg.attr("width", width).attr("height", height);
+});
+</script>
+</body>
+</html>

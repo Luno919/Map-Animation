@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Pokémon Expansion - Final Reveal</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<style>
+html, body {
+  margin: 0; padding: 0; overflow: hidden;
+  width: 100%; height: 100%;
+  background: #070b14;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+svg { width: 100%; height: 100%; display: block; }
+
+.country { 
+  fill: #1b2333; 
+  stroke: #0d1320; 
+  stroke-width: 0.2;
+}
+
+.visited {
+  fill: #ffcb05 !important;
+  transition: fill 1.2s ease;
+  filter: drop-shadow(0 0 5px rgba(255,203,5,0.4));
+}
+
+#countryName {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 40px;
+  font-weight: 900;
+  color: white;
+  opacity: 0;
+  text-shadow: 0 0 20px rgba(0,0,0,0.8);
+  z-index: 10;
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+#start {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%);
+  padding: 15px 40px;
+  font-size: 18px;
+  border-radius: 50px;
+  cursor: pointer;
+  background: #ffcb05;
+  border: none;
+  font-weight: bold;
+  z-index: 20;
+  box-shadow: 0 0 20px rgba(255,203,5,0.3);
+}
+</style>
+</head>
+
+<body>
+
+<div id="countryName"></div>
+<button id="start">START JOURNEY</button>
+<svg id="viz"></svg>
+
+<script>
+const width = window.innerWidth;
+const height = window.innerHeight;
+const svg = d3.select("#viz");
+const g = svg.append("g");
+const mapLayer = g.append("g");
+const markerLayer = g.append("g");
+
+const projection = d3.geoMercator()
+  .scale(width / 6.5)
+  .translate([width / 2, height / 1.5]);
+
+const geoPath = d3.geoPath().projection(projection);
+
+const countries = [
+  { name: "Japan", lon: 138.25, lat: 36.2 },
+  { name: "USA", lon: -95.7, lat: 37.1 },
+  { name: "United Kingdom", lon: -3.4, lat: 55.3 },
+  { name: "France", lon: 2.2, lat: 46.2 },
+  { name: "Germany", lon: 10.4, lat: 51.2 },
+  { name: "Italy", lon: 12.5, lat: 41.8 },
+  { name: "Spain", lon: -3.7, lat: 40.4 },
+  { name: "Australia", lon: 133.7, lat: -25.3 },
+  { name: "South Korea", lon: 127.7, lat: 36.5 },
+  { name: "India", lon: 78.9, lat: 20.6 }
+];
+
+let traveler; 
+const ballSize = 20;
+const ballImg = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png";
+
+d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson").then(world => {
+  const worldMap = mapLayer.selectAll("path")
+    .data(world.features)
+    .enter().append("path")
+    .attr("class", "country")
+    .attr("d", geoPath)
+    .attr("id", d => "c-" + d.properties.name.replace(/\s+/g, '-'));
+
+  traveler = markerLayer.append("image")
+    .attr("href", ballImg)
+    .attr("width", ballSize)
+    .attr("height", ballSize)
+    .style("opacity", 0);
+
+  document.getElementById("start").onclick = () => {
+    document.getElementById("start").style.display = "none";
+    startSequence(0);
+  };
+
+  function startSequence(i) {
+    if (i >= countries.length) {
+      // THE FINAL ZOOM OUT
+      setTimeout(() => {
+        d3.select("#countryName").text("Global Expansion Complete")
+          .transition().duration(1000).style("opacity", 1);
+          
+        g.transition()
+          .duration(3000)
+          .ease(d3.easeCubicInOut)
+          .attr("transform", d3.zoomIdentity); // Resets to original scale/position
+          
+        traveler.transition().duration(1000).style("opacity", 0);
+      }, 1000);
+      return;
+    }
+
+    const c = countries[i];
+    const [targetX, targetY] = projection([c.lon, c.lat]);
+    
+    // Zoom in on current target
+    const transform = d3.zoomIdentity
+      .translate(width / 2, height / 2)
+      .scale(3.8)
+      .translate(-targetX, -targetY);
+
+    g.transition()
+      .duration(1800)
+      .ease(d3.easeCubicInOut)
+      .attr("transform", transform);
+
+    // Ball movement
+    if (i === 0) {
+      traveler.attr("x", targetX - ballSize/2).attr("y", targetY - ballSize/2)
+        .transition().duration(500).style("opacity", 1);
+    } else {
+      traveler.transition()
+        .duration(1800)
+        .ease(d3.easeCubicInOut)
+        .attr("x", targetX - ballSize/2)
+        .attr("y", targetY - ballSize/2);
+    }
+
+    // Mark arrival
+    setTimeout(() => {
+      d3.select("#c-" + c.name.replace(/\s+/g, '-')).classed("visited", true);
+
+      markerLayer.append("image")
+        .attr("href", ballImg)
+        .attr("x", targetX - ballSize/2)
+        .attr("y", targetY - ballSize/2)
+        .attr("width", ballSize)
+        .attr("height", ballSize)
+        .style("opacity", 0)
+        .transition().duration(400).style("opacity", 1);
+
+      d3.select("#countryName").text(c.name).transition().style("opacity", 1);
+    }, 1400);
+
+    // Pause and loop
+    setTimeout(() => {
+      d3.select("#countryName").transition().duration(500).style("opacity", 0);
+      startSequence(i + 1);
+    }, 3200);
+  }
+});
+</script>
+</body>
+</html>
